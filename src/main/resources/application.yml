@@ -1,0 +1,17 @@
+server:
+    port: 9095
+
+spring:
+    application:
+        name: admin-server
+#    boot:
+#        admin:
+#            instance-auth:
+#                enabled: true
+#                default-user-name: 123456
+#                default-password: admin1
+
+    security:
+        user:
+            name: admin
+            password: admin

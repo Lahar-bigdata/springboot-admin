@@ -1,0 +1,46 @@
+# spring config
+spring:
+    servlet:
+        multipart:
+            max-file-size: 50MB
+    profiles:
+        active: dev
+    security:
+        # admin-client 的用户名和密码
+        user:
+            name: admin1
+            password: 123456
+    boot:
+        # admin 监控配置
+        admin:
+            client:
+                url: http://localhost:9095
+                username: admin
+                password: admin
+                instance:
+                    metadata:
+                        # 这里配置admin-client的账号和密码
+                        user.name: ${spring.security.user.name}
+                        user.password: ${spring.security.user.password}
+#                    management-base-url:
+
+    application:
+        name: predict-server
+
+# management
+management:
+    endpoints:
+        web:
+            exposure:
+                include: '*'
+    endpoint:
+        health:
+            show-details: ALWAYS
+# log config
+logging:
+    config: classpath:log4j.properties
+
+# self define properties
+server:
+    api-access:
+        whitelist: /api/open/**

@@ -1,0 +1,122 @@
+package com.qiyi.bi.predict.common.config;
+
+import de.codecentric.boot.admin.client.config.ClientProperties;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.security.SecurityProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.authentication.AbstractAuthenticationProcessingFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
+
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+/**
+ * @Description: ...
+ * @Author: Li Yalei - Robin
+ * @Date: 2021/7/12 19:59
+ */
+
+@Slf4j
+@Order(1)
+@Configuration
+public class MonitorSecurityConfig extends WebSecurityConfigurerAdapter {
+
+    private ClientProperties clientProperties;
+
+    private SecurityProperties securityProperties;
+
+    public MonitorSecurityConfig(ClientProperties client, SecurityProperties security) {
+        this.clientProperties = client;
+        this.securityProperties = security;
+        log.info("MonitorSecurityConfig... start");
+    }
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        //super.configure(auth);
+        auth.authenticationProvider(daoAuthenticationProvider());
+        //inMemoryAuthentication 从内存中获取
+        auth.inMemoryAuthentication().withUser(securityProperties.getUser().getName())
+                .password("{noop}" + securityProperties.getUser().getPassword()).roles("USER");
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        //  这个配置只针对  /actuator/** 的请求生效
+        http.antMatcher("/actuator/**")
+                // /actuator/下所有请求都要认证
+                .authorizeRequests().anyRequest().authenticated()
+                // 启用httpBasic认证模式，当springboot admin-client 配置了密码时，
+                // admin-server走httpbasic的认证方式来拉取client的信息
+                .and().httpBasic()
+                // 禁用csrf
+                .and().csrf().disable();
+        /*http.addFilterBefore(new ApiUsernamePasswordAuthenticationFilter(authenticationManager()), BasicAuthenticationFilter.class);*/
+    }
+
+    @Bean
+    public DaoAuthenticationProvider daoAuthenticationProvider() {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
+        provider = new LoginAuthenticationProvider(userDetailsService());
+        return provider;
+    }
+
+    public static class LoginAuthenticationProvider extends DaoAuthenticationProvider {
+
+        public LoginAuthenticationProvider(UserDetailsService userDetailsService) {
+            setUserDetailsService(userDetailsService);
+            /*
+            //此处可以显示设置encoder
+            PasswordEncoder encoder = NoOpPasswordEncoder.getInstance();
+            setPasswordEncoder(encoder);*/
+        }
+
+        @Override
+        protected void additionalAuthenticationChecks(UserDetails userDetails, UsernamePasswordAuthenticationToken authentication)
+                throws AuthenticationException {
+            if (authentication.getCredentials() == null) {
+                throw new BadCredentialsException(messages.getMessage("AbstractUserDetailsAuthenticationProvider.badCredentials", "Bad credentials"));
+            }
+            String presentedPassword = authentication.getCredentials().toString();
+            PasswordEncoder passwordEncoder = getPasswordEncoder();
+            if (!passwordEncoder.matches(presentedPassword, userDetails.getPassword())) {
+                logger.debug("Authentication failed: password does not match stored value");
+                throw new BadCredentialsException(messages.getMessage("AbstractUserDetailsAuthenticationProvider.badCredentials", "Bad credentials"));
+            }
+        }
+    }
+
+    /**
+     * 此类可以用作自定义，路径匹配特殊处理
+     */
+    public static class ApiUsernamePasswordAuthenticationFilter extends AbstractAuthenticationProcessingFilter {
+        public ApiUsernamePasswordAuthenticationFilter(AuthenticationManager authenticationManager) {
+            super(new AntPathRequestMatcher("/actuator/health", "GET"));
+        }
+
+        @Override
+        public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response)
+                throws AuthenticationException, IOException, ServletException {
+            //验证码登录
+            UsernamePasswordAuthenticationToken authRequest = new UsernamePasswordAuthenticationToken("admin1", "123456");
+            return this.getAuthenticationManager().authenticate(authRequest);
+        }
+    }
+
+}
